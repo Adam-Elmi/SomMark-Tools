@@ -2611,7 +2611,17 @@ var SomMarkHighlight = (function (exports) {
 	      const prev = rawTokens[i - 1] ?? null;
 	      const next = rawTokens[i + 1] ?? null;
 
-	      return renderToken({ prev, current, next }, userTokens, other, onToken);
+	      const rendered = renderToken({ prev, current, next }, userTokens, other, onToken);
+
+	      if (current.type === "LOGIC") {
+	        // Lexer strips ${ and }$ — restore them styled as the preceding keyword
+	        const kwType   = prev?.type ?? "STATIC_KEYWORD";
+	        const openHtml  = renderToken({ prev, current: { type: kwType, value: "${" },  next: current }, userTokens, other, onToken);
+	        const closeHtml = renderToken({ prev: current, current: { type: kwType, value: "}$" }, next }, userTokens, other, onToken);
+	        return openHtml + rendered + closeHtml;
+	      }
+
+	      return rendered;
 	    })
 	    .join("");
 	}
@@ -21574,6 +21584,33 @@ var SomMarkHighlight = (function (exports) {
 	  if (def) fromObj(def);
 	}
 
+	const LOGIC_KW = new Set(["STATIC_KEYWORD", "RUNTIME_KEYWORD", "FOR_EACH"]);
+
+	function addDelimDecorations(kwType, pos, config, builder) {
+	  const { tokens: userTokens = {}, other } = config;
+	  const singleStyle = (s) => builder.add(pos, pos + 2, Decoration.mark({ attributes: { style: s } }));
+	  const fromObj = (o) => {
+	    const p = [];
+	    if (o.color)  p.push(`color:${o.color}`);
+	    if (o.bold)   p.push(`font-weight:bold`);
+	    if (o.italic) p.push(`font-style:italic`);
+	    if (p.length) singleStyle(p.join(";"));
+	  };
+	  const tc = userTokens[kwType];
+	  if (tc !== undefined) {
+	    if (tc === null) return;
+	    if (typeof tc === "string")                       { singleStyle(`color:${tc}`); return; }
+	    if (tc.color !== undefined || tc.bold || tc.italic) { fromObj(tc); return; }
+	    return;
+	  }
+	  if (other != null) {
+	    if (typeof other === "string")                       { singleStyle(`color:${other}`); return; }
+	    if (other.color !== undefined || other.bold || other.italic) { fromObj(other); return; }
+	  }
+	  const def = defaults[kwType];
+	  if (def) fromObj(def);
+	}
+
 	function buildDecorations(view, config) {
 	  const text   = view.state.doc.toString();
 	  const tokens = lexSync(text);
@@ -21588,6 +21625,17 @@ var SomMarkHighlight = (function (exports) {
 	      addDecorations(i, tokens, config, pos, builder);
 
 	    pos += token.value.length;
+
+	    if (LOGIC_KW.has(token.type)) {
+	      // ${ follows the keyword — decorate it with keyword style, advance past it
+	      addDelimDecorations(token.type, pos, config, builder);
+	      pos += 2;
+	    } else if (token.type === "LOGIC") {
+	      // }$ follows the logic content — find the keyword type from before
+	      const kwToken = tokens.slice(0, i).reverse().find(t => t.type !== "WHITESPACE");
+	      addDelimDecorations(kwToken?.type ?? "STATIC_KEYWORD", pos, config, builder);
+	      pos += 2;
+	    }
 	  }
 
 	  return builder.finish();
