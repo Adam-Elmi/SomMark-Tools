@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sommark-highlight · browser test</title>
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #13161d;
+      --elevated: #1a1d26;
+      --border: rgba(255, 255, 255, 0.07);
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.18);
+      --text: #e8eaf0;
+      --muted: #8b8fa8;
+      --faint: #4b4f68;
+      --mono: "JetBrains Mono", monospace;
+      --radius: 8px;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+      padding: 2.5rem 2rem;
+      max-width: 860px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+    }
+
+    /* ── Header ── */
+    .page-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .page-title {
+      font-family: var(--mono);
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: var(--accent);
+    }
+
+    .page-sub {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    /* ── Section ── */
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .section-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--faint);
+    }
+
+    /* ── Code block (static) ── */
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .code-block-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.45rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--elevated);
+    }
+
+    .code-block-name {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--faint);
+    }
+
+    .copy-btn {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.15rem 0.5rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.12s, border-color 0.12s;
+    }
+
+    .copy-btn:hover {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .copy-btn.copied {
+      color: #4ade80;
+      border-color: rgba(74, 222, 128, 0.3);
+    }
+
+    pre.output {
+      padding: 1rem 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.75;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ── Dynamic editor ── */
+    .editor-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .editor-block:focus-within {
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .editor-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.45rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--elevated);
+    }
+
+    .editor-bar-name {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--faint);
+    }
+
+    .editor-bar-hint {
+      font-size: 0.68rem;
+      color: var(--faint);
+    }
+
+    /* CodeMirror container — inherits our font */
+    #editor {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.75;
+      min-height: 200px;
+    }
+
+    /* CodeMirror resets */
+    #editor .cm-editor {
+      background: transparent !important;
+    }
+
+    /* scrollbars */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--elevated);
+      border-radius: 3px;
+    }
+  </style>
+
+  <!-- Run `sommark bundle ./bundle --only-lexer` in this directory first, then serve via HTTP -->
+  <script type="importmap">
+  {
+    "imports": {
+      "sommark":              "../bundle/sommark.parser.js",
+      "@codemirror/view":     "https://esm.sh/@codemirror/view@6",
+      "@codemirror/state":    "https://esm.sh/@codemirror/state@6",
+      "@codemirror/commands": "https://esm.sh/@codemirror/commands@6"
+    }
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" />
+</head>
+
+<body>
+
+  <div class="page-header">
+    <span class="page-title">sommark-highlight</span>
+    <span class="page-sub">browser test — static &amp; dynamic highlighting</span>
+  </div>
+
+  <!-- ── Static: default ── -->
+  <div class="section">
+    <span class="section-label">Static — default theme</span>
+    <div class="code-block">
+      <div class="code-block-bar">
+        <span class="code-block-name">sample.smark</span>
+        <button class="copy-btn" data-target="staticDefault">Copy</button>
+      </div>
+      <pre class="output" id="staticDefault"></pre>
+    </div>
+  </div>
+
+  <!-- ── Static: custom tokens ── -->
+  <div class="section">
+    <span class="section-label">Static — custom tokens</span>
+    <div class="code-block">
+      <div class="code-block-bar">
+        <span class="code-block-name">sample.smark</span>
+        <button class="copy-btn" data-target="staticCustom">Copy</button>
+      </div>
+      <pre class="output" id="staticCustom"></pre>
+    </div>
+  </div>
+
+  <!-- ── Static: onToken ── -->
+  <div class="section">
+    <span class="section-label">Static — onToken full control</span>
+    <div class="code-block">
+      <div class="code-block-bar">
+        <span class="code-block-name">sample.smark</span>
+        <button class="copy-btn" data-target="staticOnToken">Copy</button>
+      </div>
+      <pre class="output" id="staticOnToken"></pre>
+    </div>
+  </div>
+
+  <!-- ── Dynamic ── -->
+  <div class="section">
+    <span class="section-label">Dynamic — live editor (CodeMirror 6)</span>
+    <div class="editor-block">
+      <div class="editor-bar">
+        <span class="editor-bar-name">untitled.smark</span>
+        <span class="editor-bar-hint">Tab · undo/redo · full cursor support</span>
+      </div>
+      <div id="editor"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { staticHighlight } from "../index.js";
+    import { attachHighlighter } from "../src/dynamic.js";
+
+    // ── Shared highlight config ───────────────────────────────────
+    const highlightConfig = {
+      tokens: {
+        IDENTIFIER: "#60a5fa",
+        KEY: "#34d399",
+        END_KEYWORD: { color: "#6366f1", bold: true },
+        COMMENT: { color: "#4b4f68", italic: true },
+        COMMENT_BLOCK: { color: "#4b4f68", italic: true },
+        VALUE: {
+          context: ({ prev, current, next }) => {
+            const color = (prev?.type === "QUOTE" && next?.type === "QUOTE") ? "#fbbf24" : "#a3e635";
+            return `<span style="color:${color}">${current.value}</span>`;
+          }
+        },
+        PREFIX_V: {
+          render: (value) => {
+            const prefix = value[0];
+            const open = value[1];
+            const key = value.slice(2, -1);
+            const close = value[value.length - 1];
+            return `<span style="color:#f472b6">${prefix}</span><span style="color:#fb923c">${open}</span><span style="color:#34d399">${key}</span><span style="color:#fb923c">${close}</span>`;
+          }
+        },
+        PREFIX_P: "#fb923c",
+        PREFIX_JS: "#facc15",
+        LOGIC: "#a3e635",
+        STATIC_KEYWORD: "#c084fc",
+        RUNTIME_KEYWORD: "#c084fc",
+        FOR_EACH: "#c084fc",
+      },
+      other: "#8b8fa8"
+    };
+
+    const sample = `[Layout = title: "Home", lang: "en"]
+  [div = class: "hero"]
+    # page heading
+    [h1 = class: "title"]v{name}[end]
+    [p = class: "bio"]p{description}[end]
+    [a = href: p{link}, class: "cta"]Read more[end]
+  [end]
+[end]`;
+
+    // ── 1. Default theme ─────────────────────────────────────────
+    document.getElementById("staticDefault").innerHTML = staticHighlight(sample);
+
+    // ── 2. Custom tokens ─────────────────────────────────────────
+    document.getElementById("staticCustom").innerHTML =
+      staticHighlight(sample, {
+        ...highlightConfig,
+        tokens: {
+          ...highlightConfig.tokens,
+          IDENTIFIER: "#f472b6",
+          COMMENT: { render: (v) => `<span style="color:#4b4f68;font-style:italic;opacity:0.55">${v}</span>` },
+        }
+      });
+
+    // ── 3. onToken ───────────────────────────────────────────────
+    document.getElementById("staticOnToken").innerHTML =
+      staticHighlight(sample, {
+        onToken: ({ current }) => {
+          const map = {
+            IDENTIFIER: "#60a5fa", END_KEYWORD: "#6366f1",
+            KEY: "#34d399", COMMENT: "#4b4f68",
+            PREFIX_V: "#f472b6", PREFIX_P: "#fb923c",
+          };
+          const color = map[current.type];
+          if (!color) return undefined;
+          const bold = current.type === "END_KEYWORD" ? ";font-weight:bold" : "";
+          const italic = current.type === "COMMENT" ? ";font-style:italic" : "";
+          return `<span style="color:${color}${bold}${italic}">${current.value}</span>`;
+        }
+      });
+
+    // ── 4. Dynamic editor ────────────────────────────────────────
+    const jar = attachHighlighter(document.getElementById("editor"), {
+      ...highlightConfig,
+      caretColor: "#e8eaf0",
+    });
+
+    jar.setValue(sample);
+
+    // ── Copy buttons ─────────────────────────────────────────────
+    document.querySelectorAll(".copy-btn[data-target]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const pre = document.getElementById(btn.dataset.target);
+        navigator.clipboard.writeText(pre.textContent).then(() => {
+          btn.textContent = "Copied!";
+          btn.classList.add("copied");
+          setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 1800);
+        });
+      });
+    });
+  </script>
+</body>
+
+</html>
