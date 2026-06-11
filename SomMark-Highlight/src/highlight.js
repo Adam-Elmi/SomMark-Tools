@@ -101,7 +101,17 @@ export function staticHighlight(text, config = {}) {
       const prev = rawTokens[i - 1] ?? null;
       const next = rawTokens[i + 1] ?? null;
 
-      return renderToken({ prev, current, next }, userTokens, other, onToken);
+      const rendered = renderToken({ prev, current, next }, userTokens, other, onToken);
+
+      if (current.type === "LOGIC") {
+        // Lexer strips ${ and }$ — restore them styled as the preceding keyword
+        const kwType   = prev?.type ?? "STATIC_KEYWORD";
+        const openHtml  = renderToken({ prev, current: { type: kwType, value: "${" },  next: current }, userTokens, other, onToken);
+        const closeHtml = renderToken({ prev: current, current: { type: kwType, value: "}$" }, next }, userTokens, other, onToken);
+        return openHtml + rendered + closeHtml;
+      }
+
+      return rendered;
     })
     .join("");
 }
