@@ -395,70 +395,9 @@
 
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/sommark-highlight/dist/sommark-highlight.js"></script>
   <script type="module">
-    import { lexSync } from "./bundle/sommark.lexer.js";
-
-    // ── staticHighlight (inlined — works with file:// protocol) ──
-    function escapeHtml(s) {
-      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    }
-    function applyStyle(value, cfg) {
-      const p = [];
-      if (cfg.color)  p.push(`color:${cfg.color}`);
-      if (cfg.bold)   p.push(`font-weight:bold`);
-      if (cfg.italic) p.push(`font-style:italic`);
-      if (!p.length)  return escapeHtml(value);
-      return `<span style="${p.join(";")}">${escapeHtml(value)}</span>`;
-    }
-    const DEFAULTS = {
-      OPEN_BRACKET:{color:"#8b8fa8"},CLOSE_BRACKET:{color:"#8b8fa8"},
-      EQUAL:{color:"#8b8fa8"},COLON:{color:"#8b8fa8"},
-      COMMA:{color:"#4b4f68"},SEMICOLON:{color:"#4b4f68"},QUOTE:{color:"#4b4f68"},
-      THIN_ARROW:{color:"#8b8fa8"},OPEN_AT:{color:"#8b8fa8"},CLOSE_AT:{color:"#8b8fa8"},
-      OPEN_PAREN:{color:"#8b8fa8"},CLOSE_PAREN:{color:"#8b8fa8"},
-      ESCAPE:{color:"#fb923c"},EXCLAMATION_MARK:{color:"#f87171"},
-      END_KEYWORD:{color:"#6366f1",bold:true},
-      IMPORT:{color:"#818cf8"},USE_MODULE:{color:"#818cf8"},SLOT_KEYWORD:{color:"#818cf8"},
-      FOR_EACH:{color:"#c084fc"},STATIC_KEYWORD:{color:"#c084fc"},RUNTIME_KEYWORD:{color:"#c084fc"},
-      IDENTIFIER:{color:"#60a5fa"},KEY:{color:"#34d399"},
-      PREFIX_V:{color:"#f472b6"},PREFIX_P:{color:"#fb923c"},PREFIX_JS:{color:"#facc15"},
-      LOGIC:{color:"#a3e635"},
-      COMMENT:{color:"#4b4f68",italic:true},COMMENT_BLOCK:{color:"#4b4f68",italic:true},
-      TEXT:{color:"#e8eaf0"},
-    };
-    function renderToken(ctx, userTokens, other, onToken) {
-      const { prev, current, next } = ctx;
-      const escaped = escapeHtml(current.value);
-      if (onToken) { const r = onToken(ctx); if (r != null) return r; }
-      const tc = userTokens?.[current.type];
-      if (tc !== undefined) {
-        if (tc === null) return escaped;
-        if (typeof tc === "string") return `<span style="color:${tc}">${escaped}</span>`;
-        if (typeof tc.render   === "function") return tc.render(current.value, current.type);
-        if (typeof tc.context  === "function") { const r = tc.context(ctx); if (r != null) return r; }
-        if (tc.color !== undefined || tc.bold || tc.italic) return applyStyle(current.value, tc);
-      }
-      if (other !== undefined) {
-        if (other === null) return escaped;
-        if (typeof other === "string") return `<span style="color:${other}">${escaped}</span>`;
-        if (typeof other.render  === "function") return other.render(current.value, current.type);
-        if (typeof other.context === "function") { const r = other.context(ctx); if (r != null) return r; }
-        if (other.color !== undefined || other.bold || other.italic) return applyStyle(current.value, other);
-      }
-      const def = DEFAULTS[current.type];
-      return def ? applyStyle(current.value, def) : escaped;
-    }
-    function staticHighlight(text, config = {}) {
-      const { tokens: userTokens, other, onToken } = config;
-      const raw = lexSync(text);
-      return raw.map((current, i) => {
-        if (current.type === "EOF") return "";
-        if (current.type === "WHITESPACE") return current.value;
-        const prev = raw[i - 1] ?? null;
-        const next = raw[i + 1] ?? null;
-        return renderToken({ prev, current, next }, userTokens, other, onToken);
-      }).join("");
-    }
+    const { staticHighlight } = SomMarkHighlight;
 
     // ── Elements ──────────────────────────────────────────────
     const collectionsToggle = document.getElementById("collectionsToggle");
