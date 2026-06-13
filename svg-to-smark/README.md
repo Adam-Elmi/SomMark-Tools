@@ -4,6 +4,16 @@ A browser tool that converts SVG markup into [SomMark](https://github.com/Adam-E
 
 ---
 
+## Build
+
+The layout is split into SomMark components under `components/`. After editing them, rebuild `index.html` with the SomMark CLI:
+
+```bash
+sommark --html components/layout.smark -o index.html ./
+```
+
+---
+
 ## Usage
 
 Must be served over HTTP — `file://` will not work.
