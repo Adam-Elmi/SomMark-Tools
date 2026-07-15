@@ -834,160 +834,6 @@ var SomMarkHighlight = (function (exports, jsTokens) {
 	    return lexer(src, filename);
 	};
 
-	// Default token colors — web CSS values
-	// These are used when the user doesn't specify a token config
-
-	const defaults = {
-	  OPEN_BRACKET:     { color: "#8b8fa8" },
-	  CLOSE_BRACKET:    { color: "#8b8fa8" },
-	  EQUAL:            { color: "#8b8fa8" },
-	  COLON:            { color: "#8b8fa8" },
-	  COMMA:            { color: "#4b4f68" },
-	  SEMICOLON:        { color: "#4b4f68" },
-	  QUOTE:            { color: "#cf694a" },
-	  THIN_ARROW:       { color: "#8b8fa8" },
-	  OPEN_AT:          { color: "#8b8fa8" },
-	  CLOSE_AT:         { color: "#8b8fa8" },
-	  OPEN_PAREN:       { color: "#8b8fa8" },
-	  CLOSE_PAREN:      { color: "#8b8fa8" },
-	  ESCAPE:           { color: "#fb923c" },
-	  EXCLAMATION_MARK: { color: "#f87171" },
-
-	  END_KEYWORD:      { color: "#6366f1", bold: true },
-	  IMPORT:           { color: "#818cf8" },
-	  USE_MODULE:       { color: "#818cf8" },
-	  SLOT_KEYWORD:     { color: "#818cf8" },
-	  FOR_EACH:         { color: "#c084fc" },
-	  STATIC_KEYWORD:   { color: "#c084fc" },
-	  RUNTIME_KEYWORD:  { color: "#c084fc" },
-
-	  IDENTIFIER:       { color: "#60a5fa" },
-	  KEY:              { color: "#34d399" },
-	  VALUE:            { color: "#fbbf24" },
-
-	  PREFIX_V:         { color: "#f472b6" },
-	  PREFIX_P:         { color: "#fb923c" },
-	  PREFIX_OPEN:      { color: "#8b8fa8" },
-	  PREFIX_CLOSE:     { color: "#8b8fa8" },
-
-	  LOGIC_OPEN:       { color: "#c084fc" },
-	  LOGIC:            { color: "#a3e635" },
-	  LOGIC_CLOSE:      { color: "#c084fc" },
-	  PIPELINE:         { color: "#8b8fa8" },
-
-	  COMMENT:          { color: "#4b4f68", italic: true },
-	  COMMENT_BLOCK:    { color: "#4b4f68", italic: true },
-
-	  TEXT:             { color: "#e8eaf0" },
-	  WHITESPACE:       null,
-	  EOF:              null,
-	};
-
-	// ── Helpers ───────────────────────────────────────────────────
-
-	function escapeHtml$1(str) {
-	  return str
-	    .replace(/&/g, "&amp;")
-	    .replace(/</g, "&lt;")
-	    .replace(/>/g, "&gt;");
-	}
-
-	function applyStyle(value, config) {
-	  if (!config) return escapeHtml$1(value);
-
-	  const style = [];
-	  if (config.color)  style.push(`color:${config.color}`);
-	  if (config.bold)   style.push(`font-weight:bold`);
-	  if (config.italic) style.push(`font-style:italic`);
-
-	  if (style.length === 0) return escapeHtml$1(value);
-	  return `<span style="${style.join(";")}">${escapeHtml$1(value)}</span>`;
-	}
-
-	// ── Core renderer ─────────────────────────────────────────────
-
-	// Resolves what to render for a single token given full context.
-	// Priority: onToken → tokens[type] → other → default → raw
-	function renderToken(ctx, userTokens, other, onToken) {
-	  const { prev, current, next } = ctx;
-	  const escaped = escapeHtml$1(current.value);
-
-	  // 1. onToken — full override
-	  if (onToken) {
-	    const result = onToken(ctx);
-	    if (result !== undefined && result !== null) return result;
-	  }
-
-	  // 2. tokens[type] — per-token config
-	  const tokenConfig = userTokens?.[current.type];
-	  if (tokenConfig !== undefined) {
-	    // explicit null → no highlight
-	    if (tokenConfig === null) return escaped;
-	    // string shorthand: "red" → color
-	    if (typeof tokenConfig === "string") {
-	      return `<span style="color:${tokenConfig}">${escaped}</span>`;
-	    }
-	    // { render } — custom renderer, no context
-	    if (typeof tokenConfig.render === "function") {
-	      return tokenConfig.render(current.value, current.type);
-	    }
-	    // { context } — context-sensitive renderer
-	    if (typeof tokenConfig.context === "function") {
-	      const result = tokenConfig.context(ctx);
-	      if (result !== undefined && result !== null) return result;
-	    }
-	    // { color, bold?, italic? }
-	    if (tokenConfig.color !== undefined || tokenConfig.bold || tokenConfig.italic) {
-	      return applyStyle(current.value, tokenConfig);
-	    }
-	  }
-
-	  // 3. other — fallback for unspecified tokens
-	  if (other !== undefined) {
-	    if (typeof other === "string") {
-	      return `<span style="color:${other}">${escaped}</span>`;
-	    }
-	    if (typeof other.render === "function") {
-	      return other.render(current.value, current.type);
-	    }
-	    if (typeof other.context === "function") {
-	      const result = other.context(ctx);
-	      if (result !== undefined && result !== null) return result;
-	    }
-	    if (other.color !== undefined || other.bold || other.italic) {
-	      return applyStyle(current.value, other);
-	    }
-	    if (other === null) return escaped;
-	  }
-
-	  // 4. built-in defaults
-	  const def = defaults[current.type];
-	  if (def) return applyStyle(current.value, def);
-
-	  // 5. raw — no highlight
-	  return escaped;
-	}
-
-	// ── staticHighlight ───────────────────────────────────────────
-
-	function staticHighlight(text, config = {}) {
-	  const { tokens: userTokens, other, onToken } = config;
-
-	  const rawTokens = lexSync(text);
-
-	  return rawTokens
-	    .map((current, i) => {
-	      if (current.type === "EOF") return "";
-	      if (current.type === "WHITESPACE") return current.value;
-
-	      const prev = rawTokens[i - 1] ?? null;
-	      const next = rawTokens[i + 1] ?? null;
-
-	      return renderToken({ prev, current, next }, userTokens, other, onToken);
-	    })
-	    .join("");
-	}
-
 	const JS_KEYWORDS = new Set([
 	  "break", "case", "catch", "class", "const", "continue", "debugger",
 	  "default", "delete", "do", "else", "export", "extends", "finally",
@@ -1004,7 +850,7 @@ var SomMarkHighlight = (function (exports, jsTokens) {
 	  objKey:    "color:#7dd3fc",
 	  property:  "color:#7dd3fc",
 	  string:    "color:#ce9178",
-	  template:  "color:#cf694a",
+	  template:  "color:#ce9178",
 	  number:    "color:#b5cea8",
 	  comment:   "color:#4b4f68;font-style:italic",
 	  regex:     "color:#f87171",
@@ -1070,7 +916,7 @@ var SomMarkHighlight = (function (exports, jsTokens) {
 	  }
 	}
 
-	function escapeHtml(str) {
+	function escapeHtml$1(str) {
 	  return str
 	    .replace(/&/g, "&amp;")
 	    .replace(/</g, "&lt;")
@@ -1078,7 +924,7 @@ var SomMarkHighlight = (function (exports, jsTokens) {
 	}
 
 	function span(style, value) {
-	  return `<span style="${style}">${escapeHtml(value)}</span>`;
+	  return `<span style="${style}">${escapeHtml$1(value)}</span>`;
 	}
 
 	function highlightJs(code) {
@@ -1086,7 +932,7 @@ var SomMarkHighlight = (function (exports, jsTokens) {
 	  let out = "";
 	  for (let i = 0; i < tokens.length; i++) {
 	    const style = styleFor(tokens, i);
-	    out += style ? span(style, tokens[i].value) : escapeHtml(tokens[i].value);
+	    out += style ? span(style, tokens[i].value) : escapeHtml$1(tokens[i].value);
 	  }
 	  return out;
 	}
@@ -1102,6 +948,190 @@ var SomMarkHighlight = (function (exports, jsTokens) {
 	    if (style) mark(pos + offset, pos + offset + len, style);
 	    offset += len;
 	  }
+	}
+
+	// Default token colors — VS Code Dark+ palette (same as old SomMark-Site playground)
+
+	function _esc(s) {
+	  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	}
+
+	const _BOOL_NULL = new Set(["true", "false", "null", "undefined"]);
+
+	const defaults = {
+	  OPEN_BRACKET:     { color: "#c586c0" },
+	  CLOSE_BRACKET:    { color: "#c586c0" },
+	  EQUAL:            { color: "#8b8fa8" },
+	  COLON:            { color: "#8b8fa8" },
+	  COMMA:            { color: "#8b8fa8" },
+	  SEMICOLON:        { color: "#8b8fa8" },
+	  QUOTE:            { color: "#ce9178" },
+	  THIN_ARROW:       { color: "#8b8fa8" },
+	  OPEN_AT:          { color: "#c586c0" },
+	  CLOSE_AT:         { color: "#c586c0" },
+	  OPEN_PAREN:       { color: "#8b8fa8" },
+	  CLOSE_PAREN:      { color: "#8b8fa8" },
+	  ESCAPE:           { color: "#fb923c" },
+	  EXCLAMATION_MARK: { color: "#f87171" },
+
+	  END_KEYWORD:      { color: "#c586c0", bold: true },
+	  IMPORT:           { color: "#c586c0" },
+	  USE_MODULE:       { color: "#c586c0" },
+	  SLOT_KEYWORD:     { color: "#c586c0" },
+	  FOR_EACH:         { color: "#c586c0" },
+	  STATIC_KEYWORD:   { color: "#c586c0" },
+	  RUNTIME_KEYWORD:  { color: "#c586c0" },
+
+	  IDENTIFIER:       { color: "#4ec9b0" },
+	  KEY:              { color: "#7dd3fc" },
+
+	  // String content between quotes → #ce9178 (same as the quote chars)
+	  // Numbers → #b5cea8, booleans/null → #569CD6, everything else → #fbbf24
+	  VALUE: {
+	    context: ({ prev, current, next }) => {
+	      const v = current.value;
+	      if (prev?.type === "QUOTE" && next?.type === "QUOTE")
+	        return `<span style="color:#ce9178">${_esc(v)}</span>`;
+	      if (prev?.type !== "QUOTE" && v.trim() !== "" && !isNaN(Number(v)))
+	        return `<span style="color:#b5cea8">${_esc(v)}</span>`;
+	      if (prev?.type !== "QUOTE" && _BOOL_NULL.has(v.trim()))
+	        return `<span style="color:#569CD6">${_esc(v)}</span>`;
+	      return `<span style="color:#fbbf24">${_esc(v)}</span>`;
+	    },
+	  },
+
+	  PREFIX_V:         { color: "#c586c0" },
+	  PREFIX_P:         { color: "#c586c0" },
+	  PREFIX_OPEN:      { color: "#c586c0" },
+	  PREFIX_CLOSE:     { color: "#c586c0" },
+
+	  LOGIC_OPEN:       { color: "#569CD6" },
+	  // JS inside logic blocks is highlighted with the same JS highlighter.
+	  // `decorate` is the efficient path for the dynamic editor (direct decorations, no HTML parsing).
+	  // `render` is the fallback for static HTML output.
+	  LOGIC:            { render: (value) => highlightJs(value), decorate: decorateJs },
+	  LOGIC_CLOSE:      { color: "#569CD6" },
+	  PIPELINE:         { color: "#8b8fa8" },
+
+	  COMMENT:          { color: "#6a9955", italic: true },
+	  COMMENT_BLOCK:    { color: "#6a9955", italic: true },
+
+	  TEXT:             { color: "#e8eaf0" },
+	  WHITESPACE:       null,
+	  EOF:              null,
+	};
+
+	// ── Helpers ───────────────────────────────────────────────────
+
+	function escapeHtml(str) {
+	  return str
+	    .replace(/&/g, "&amp;")
+	    .replace(/</g, "&lt;")
+	    .replace(/>/g, "&gt;");
+	}
+
+	function applyStyle(value, config) {
+	  if (!config) return escapeHtml(value);
+
+	  const style = [];
+	  if (config.color)  style.push(`color:${config.color}`);
+	  if (config.bold)   style.push(`font-weight:bold`);
+	  if (config.italic) style.push(`font-style:italic`);
+
+	  if (style.length === 0) return escapeHtml(value);
+	  return `<span style="${style.join(";")}">${escapeHtml(value)}</span>`;
+	}
+
+	// ── Core renderer ─────────────────────────────────────────────
+
+	// Resolves what to render for a single token given full context.
+	// Priority: onToken → tokens[type] → other → default → raw
+	function renderToken(ctx, userTokens, other, onToken) {
+	  const { prev, current, next } = ctx;
+	  const escaped = escapeHtml(current.value);
+
+	  // 1. onToken — full override
+	  if (onToken) {
+	    const result = onToken(ctx);
+	    if (result !== undefined && result !== null) return result;
+	  }
+
+	  // 2. tokens[type] — per-token config
+	  const tokenConfig = userTokens?.[current.type];
+	  if (tokenConfig !== undefined) {
+	    // explicit null → no highlight
+	    if (tokenConfig === null) return escaped;
+	    // string shorthand: "red" → color
+	    if (typeof tokenConfig === "string") {
+	      return `<span style="color:${tokenConfig}">${escaped}</span>`;
+	    }
+	    // { render } — custom renderer, no context
+	    if (typeof tokenConfig.render === "function") {
+	      return tokenConfig.render(current.value, current.type);
+	    }
+	    // { context } — context-sensitive renderer
+	    if (typeof tokenConfig.context === "function") {
+	      const result = tokenConfig.context(ctx);
+	      if (result !== undefined && result !== null) return result;
+	    }
+	    // { color, bold?, italic? }
+	    if (tokenConfig.color !== undefined || tokenConfig.bold || tokenConfig.italic) {
+	      return applyStyle(current.value, tokenConfig);
+	    }
+	  }
+
+	  // 3. other — fallback for unspecified tokens
+	  if (other !== undefined) {
+	    if (typeof other === "string") {
+	      return `<span style="color:${other}">${escaped}</span>`;
+	    }
+	    if (typeof other.render === "function") {
+	      return other.render(current.value, current.type);
+	    }
+	    if (typeof other.context === "function") {
+	      const result = other.context(ctx);
+	      if (result !== undefined && result !== null) return result;
+	    }
+	    if (other.color !== undefined || other.bold || other.italic) {
+	      return applyStyle(current.value, other);
+	    }
+	    if (other === null) return escaped;
+	  }
+
+	  // 4. built-in defaults — support all the same shapes as userTokens
+	  const def = defaults[current.type];
+	  if (def !== undefined) {
+	    if (def === null) return escaped;
+	    if (typeof def.render === "function") return def.render(current.value, current.type);
+	    if (typeof def.context === "function") {
+	      const result = def.context(ctx);
+	      if (result !== undefined && result !== null) return result;
+	    }
+	    if (def.color !== undefined || def.bold || def.italic) return applyStyle(current.value, def);
+	  }
+
+	  // 5. raw — no highlight
+	  return escaped;
+	}
+
+	// ── staticHighlight ───────────────────────────────────────────
+
+	function staticHighlight(text, config = {}) {
+	  const { tokens: userTokens, other, onToken } = config;
+
+	  const rawTokens = lexSync(text);
+
+	  return rawTokens
+	    .map((current, i) => {
+	      if (current.type === "EOF") return "";
+	      if (current.type === "WHITESPACE") return current.value;
+
+	      const prev = rawTokens[i - 1] ?? null;
+	      const next = rawTokens[i + 1] ?? null;
+
+	      return renderToken({ prev, current, next }, userTokens, other, onToken);
+	    })
+	    .join("");
 	}
 
 	exports.decorateJs = decorateJs;
