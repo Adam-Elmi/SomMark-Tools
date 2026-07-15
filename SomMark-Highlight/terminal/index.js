@@ -36,6 +36,10 @@ const ANSI = {
   PREFIX_V:         "\x1b[35m",  // magenta
   PREFIX_P:         "\x1b[33m",  // yellow
   PREFIX_JS:        "\x1b[93m",  // bright yellow
+  PREFIX_OPEN:      "\x1b[35m",  // magenta
+  PREFIX_CLOSE:     "\x1b[35m",
+  LOGIC_OPEN:       "\x1b[34m",  // blue
+  LOGIC_CLOSE:      "\x1b[34m",
   LOGIC:            "\x1b[92m",  // bright green
   ESCAPE:           "\x1b[33m",
   EXCLAMATION_MARK: "\x1b[31m",  // red
@@ -86,6 +90,7 @@ process.stdout.write(out2 + "\n");
 // ── Test 3: tokens map with ANSI colors ──────────────────────
 console.log("\n── Test 3: tokens map (ANSI colors) ───────────────\n");
 
+
 const out3 = staticHighlight(sample, {
   tokens: Object.fromEntries(
     Object.entries(ANSI).map(([type, code]) => [
@@ -97,3 +102,96 @@ const out3 = staticHighlight(sample, {
 });
 
 process.stdout.write(out3 + "\n");
+
+// ── Test 4: JS code inside logic blocks ──────────────────────
+console.log("\n── Test 4: JS inside logic blocks ─────────────────\n");
+
+// A simple JS tokenizer for ANSI output.
+// Handles keywords, strings, numbers, comments, and operators.
+function highlightJsAnsi(js) {
+  const KEYWORD = "\x1b[95m"; // bright magenta — const/let/if/return/etc.
+  const STRING  = "\x1b[33m"; // yellow — string literals
+  const NUMBER  = "\x1b[36m"; // cyan — numbers
+  const COMMENT = `${DIM}${ITALIC}`; // dim italic — // and /* */
+  const OP      = "\x1b[90m"; // dark gray — operators and punctuation
+
+  const KEYWORDS = new Set([
+    "const", "let", "var", "if", "else", "return", "true", "false", "null",
+    "undefined", "function", "class", "new", "typeof", "instanceof", "for",
+    "while", "do", "break", "continue", "throw", "try", "catch", "finally",
+  ]);
+
+  // Tokenize with a single regex alternation
+  const re = /(\/\/[^\n]*)|(\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d+\.?\d*\b)|([A-Za-z_$][\w$]*)|([+\-*/=<>!&|^~%?:,.;()[\]{}])/g;
+
+  let result = "";
+  let last = 0;
+  let m;
+  while ((m = re.exec(js)) !== null) {
+    // unstyled gap before this match
+    if (m.index > last) result += js.slice(last, m.index);
+    last = m.index + m[0].length;
+
+    if (m[1] || m[2]) {
+      result += `${COMMENT}${m[0]}${RESET}`;
+    } else if (m[3]) {
+      result += `${STRING}${m[0]}${RESET}`;
+    } else if (m[4]) {
+      result += `${NUMBER}${m[0]}${RESET}`;
+    } else if (m[5]) {
+      result += KEYWORDS.has(m[0])
+        ? `${KEYWORD}${m[0]}${RESET}`
+        : m[0];
+    } else if (m[6]) {
+      result += `${OP}${m[0]}${RESET}`;
+    }
+  }
+  if (last < js.length) result += js.slice(last);
+  return result;
+}
+
+const jsLogicSample = `[Layout = title: "Home", lang: "en"]
+  [div = class: "hero"]
+    # heading
+    [h1]v{name}[end]
+    static \${
+      // fetch user profile
+      const user = { name: "Adam", age: 25, active: true };
+
+      /* check eligibility */
+      const eligible = user.age >= 18 && user.active;
+
+      if (eligible) {
+        return \`Welcome, \${user.name}!\`;
+      }
+
+      return null;
+    }\$
+  [end]
+[end]`;
+
+const out4 = staticHighlight(jsLogicSample, {
+  onToken: ({ prev, current, next }) => {
+    if (current.type === "LOGIC")
+      return highlightJsAnsi(current.value);
+
+    if (current.type === "COMMENT" || current.type === "COMMENT_BLOCK")
+      return `${DIM}${ITALIC}${current.value}${RESET}`;
+
+    if (current.type === "END_KEYWORD")
+      return `${BOLD}${ANSI.END_KEYWORD}${current.value}${RESET}`;
+
+    if (current.type === "VALUE") {
+      if (prev?.type === "QUOTE" && next?.type === "QUOTE")
+        return `\x1b[33m${current.value}${RESET}`;
+      return `\x1b[92m${current.value}${RESET}`;
+    }
+
+    const code = ANSI[current.type];
+    if (code) return `${code}${current.value}${RESET}`;
+
+    return undefined;
+  }
+});
+
+process.stdout.write(out4 + "\n");

@@ -4,6 +4,7 @@
   [div = class: "card-header"]
     [span = class: "card-label"]SVG[end]
     [div = class: "card-header-actions"]
+      [button = class: "collections-toggle open", id: "endToggle"]\[end:name][end]
       [span = class: "input-format", style: "font-size:0.7rem"]raw <svg> markup[end]
       [button = class: "copy-btn", id: "clearSvgBtn", style: "display:none"]clear[end]
     [end]

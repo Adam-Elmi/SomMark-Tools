@@ -1,6 +1,6 @@
 import { EditorView, ViewPlugin, Decoration, keymap, lineNumbers } from "@codemirror/view";
 import { EditorState, RangeSetBuilder } from "@codemirror/state";
-import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
+import { history, defaultKeymap, historyKeymap, indentWithTab, deleteCharBackward } from "@codemirror/commands";
 import { lexSync, parseSync } from "../bundle/sommark.parser.js";
 import defaults from "./defaults.js";
 
@@ -8,21 +8,28 @@ import defaults from "./defaults.js";
 // and add one Decoration per span — enabling per-character coloring of a single token.
 const SPAN_RE = /<span\b[^>]*\bstyle="([^"]*)"[^>]*>([^<]*)<\/span>/g;
 
+function rawLen(s) {
+  return s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").length;
+}
+
 function addSpanDecorations(html, pos, len, builder) {
   SPAN_RE.lastIndex = 0;
-  let offset = 0, matched = false, m;
+  let offset = 0, lastIndex = 0, matched = false, m;
 
   while ((m = SPAN_RE.exec(html)) !== null) {
     matched = true;
-    const style    = m[1];
-    const spanLen  = m[2].length;
+    // count unstyled text between the previous span and this one
+    offset += rawLen(html.slice(lastIndex, m.index));
+    lastIndex = m.index + m[0].length;
+
+    const style   = m[1];
+    const spanLen = rawLen(m[2]);
     if (style && spanLen > 0)
       builder.add(pos + offset, pos + offset + spanLen, Decoration.mark({ attributes: { style } }));
     offset += spanLen;
   }
 
   if (!matched) {
-    // single span or plain style="..." attribute
     const sm = html.match(/\bstyle="([^"]*)"/);
     if (sm?.[1]) builder.add(pos, pos + len, Decoration.mark({ attributes: { style: sm[1] } }));
   }
@@ -51,10 +58,14 @@ function addDecorations(index, tokens, config, pos, builder) {
     if (r != null) { addSpanDecorations(r, pos, len, builder); return; }
   }
 
+  const mark = (from, to, style) =>
+    builder.add(from, to, Decoration.mark({ attributes: { style } }));
+
   const tc = userTokens[current.type];
   if (tc !== undefined) {
     if (tc === null) return;
-    if (typeof tc === "string")          { singleStyle(`color:${tc}`); return; }
+    if (typeof tc === "string")            { singleStyle(`color:${tc}`); return; }
+    if (typeof tc.decorate === "function") { tc.decorate(current.value, pos, mark); return; }
     if (typeof tc.render   === "function") { addSpanDecorations(tc.render(current.value, current.type), pos, len, builder); return; }
     if (typeof tc.context  === "function") {
       const r = tc.context(ctx);
@@ -65,7 +76,8 @@ function addDecorations(index, tokens, config, pos, builder) {
   }
 
   if (other != null) {
-    if (typeof other === "string")           { singleStyle(`color:${other}`); return; }
+    if (typeof other === "string")            { singleStyle(`color:${other}`); return; }
+    if (typeof other.decorate === "function") { other.decorate(current.value, pos, mark); return; }
     if (typeof other.render   === "function") { addSpanDecorations(other.render(current.value, current.type), pos, len, builder); return; }
     if (typeof other.context  === "function") {
       const r = other.context(ctx);
@@ -76,35 +88,18 @@ function addDecorations(index, tokens, config, pos, builder) {
   }
 
   const def = defaults[current.type];
-  if (def) fromObj(def);
+  if (def !== undefined) {
+    if (def === null) return;
+    if (typeof def.decorate === "function") { def.decorate(current.value, pos, mark); return; }
+    if (typeof def.render   === "function") { addSpanDecorations(def.render(current.value, current.type), pos, len, builder); return; }
+    if (typeof def.context  === "function") {
+      const r = def.context(ctx);
+      if (r != null) { addSpanDecorations(r, pos, len, builder); return; }
+    }
+    fromObj(def);
+  }
 }
 
-const LOGIC_KW = new Set(["STATIC_KEYWORD", "RUNTIME_KEYWORD", "FOR_EACH"]);
-
-function addDelimDecorations(kwType, pos, config, builder) {
-  const { tokens: userTokens = {}, other } = config;
-  const singleStyle = (s) => builder.add(pos, pos + 2, Decoration.mark({ attributes: { style: s } }));
-  const fromObj = (o) => {
-    const p = [];
-    if (o.color)  p.push(`color:${o.color}`);
-    if (o.bold)   p.push(`font-weight:bold`);
-    if (o.italic) p.push(`font-style:italic`);
-    if (p.length) singleStyle(p.join(";"));
-  };
-  const tc = userTokens[kwType];
-  if (tc !== undefined) {
-    if (tc === null) return;
-    if (typeof tc === "string")                       { singleStyle(`color:${tc}`); return; }
-    if (tc.color !== undefined || tc.bold || tc.italic) { fromObj(tc); return; }
-    return;
-  }
-  if (other != null) {
-    if (typeof other === "string")                       { singleStyle(`color:${other}`); return; }
-    if (other.color !== undefined || other.bold || other.italic) { fromObj(other); return; }
-  }
-  const def = defaults[kwType];
-  if (def) fromObj(def);
-}
 
 function buildDecorations(view, config) {
   const text   = view.state.doc.toString();
@@ -120,17 +115,6 @@ function buildDecorations(view, config) {
       addDecorations(i, tokens, config, pos, builder);
 
     pos += token.value.length;
-
-    if (LOGIC_KW.has(token.type)) {
-      // ${ follows the keyword — decorate it with keyword style, advance past it
-      addDelimDecorations(token.type, pos, config, builder);
-      pos += 2;
-    } else if (token.type === "LOGIC") {
-      // }$ follows the logic content — find the keyword type from before
-      const kwToken = tokens.slice(0, i).reverse().find(t => t.type !== "WHITESPACE");
-      addDelimDecorations(kwToken?.type ?? "STATIC_KEYWORD", pos, config, builder);
-      pos += 2;
-    }
   }
 
   return builder.finish();
@@ -211,6 +195,30 @@ function sommarkPlugin(config) {
   );
 }
 
+// Smart backspace: if the cursor is at the start of a line or preceded only by
+// whitespace on that line, delete back to the previous tab stop instead of one
+// character at a time. Falls through to the standard deleteCharBackward otherwise.
+const smartBackspace = ({ state, dispatch }) => {
+  const range = state.selection.main;
+  if (!range.empty) return deleteCharBackward({ state, dispatch });
+
+  const line  = state.doc.lineAt(range.head);
+  const col   = range.head - line.from;
+  const before = line.text.slice(0, col);
+
+  // only apply smart logic when everything before the cursor is whitespace
+  if (before.length > 0 && /\S/.test(before)) return deleteCharBackward({ state, dispatch });
+
+  // count how many characters to delete to reach the previous tab stop
+  const tabSize  = state.tabSize ?? 4;
+  const del = before.endsWith("\t") ? 1 : (((col - 1) % tabSize) || tabSize);
+  const from = Math.max(line.from, range.head - del);
+  if (from === range.head) return deleteCharBackward({ state, dispatch });
+
+  dispatch(state.update({ changes: { from, to: range.head }, scrollIntoView: true, userEvent: "delete.backward" }));
+  return true;
+};
+
 export function attachHighlighter(element, config = {}) {
   const { caretColor = "#e8eaf0", showLineNumbers = true, showErrors = true, onError, ...highlightConfig } = config;
 
@@ -232,7 +240,7 @@ export function attachHighlighter(element, config = {}) {
 
   const extensions = [
     history(),
-    keymap.of([...defaultKeymap, ...historyKeymap]),
+    keymap.of([indentWithTab, { key: "Backspace", run: smartBackspace }, ...defaultKeymap, ...historyKeymap]),
     sommarkPlugin(highlightConfig),
     theme,
     EditorView.lineWrapping,

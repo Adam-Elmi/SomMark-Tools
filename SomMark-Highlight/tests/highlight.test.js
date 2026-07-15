@@ -25,36 +25,34 @@ describe("staticHighlight — defaults", () => {
     expect(typeof staticHighlight(SIMPLE)).toBe("string");
   });
 
-  it("wraps IDENTIFIER in default blue span", () => {
+  it("wraps IDENTIFIER in default teal span", () => {
     const out = staticHighlight(SIMPLE);
-    expect(out).toContain(spanWith("#60a5fa", "div"));
+    expect(out).toContain(spanWith("#4ec9b0", "div"));
   });
 
-  it("wraps END_KEYWORD in default indigo bold span", () => {
+  it("wraps END_KEYWORD in default purple bold span", () => {
     const out = staticHighlight(SIMPLE);
-    expect(out).toContain(spanWithStyle("color:#6366f1;font-weight:bold", "end"));
+    expect(out).toContain(spanWithStyle("color:#c586c0;font-weight:bold", "end"));
   });
 
-  it("wraps KEY in default green span", () => {
+  it("wraps KEY in default sky-blue span", () => {
     const out = staticHighlight(WITH_KEY);
-    expect(out).toContain(spanWith("#34d399", "class"));
+    expect(out).toContain(spanWith("#7dd3fc", "class"));
   });
 
-  it("wraps COMMENT in default gray italic span", () => {
+  it("wraps COMMENT in default green italic span", () => {
     const out = staticHighlight(COMMENT);
-    expect(out).toContain(spanWithStyle("color:#4b4f68;font-style:italic", "# this is a comment"));
+    expect(out).toContain(spanWithStyle("color:#6a9955;font-style:italic", "# this is a comment"));
   });
 
-  it("wraps PREFIX_V in default pink span", () => {
+  it("wraps PREFIX_V in default purple span", () => {
     const out = staticHighlight(PREFIXES);
-    expect(out).toContain("v{name}");
-    expect(out).toContain("#f472b6");
+    expect(out).toContain(`<span style="color:#c586c0">v</span>`);
   });
 
-  it("wraps PREFIX_P in default orange span", () => {
+  it("wraps PREFIX_P in default purple span", () => {
     const out = staticHighlight(PREFIXES);
-    expect(out).toContain("p{title}");
-    expect(out).toContain("#fb923c");
+    expect(out).toContain(`<span style="color:#c586c0">p</span>`);
   });
 
   it("passes WHITESPACE through unstyled", () => {
@@ -88,7 +86,7 @@ describe("tokens — string shorthand", () => {
       tokens: { IDENTIFIER: "red" }
     });
     // END_KEYWORD still uses default
-    expect(out).toContain("#6366f1");
+    expect(out).toContain("#c586c0");
   });
 });
 
@@ -315,9 +313,102 @@ describe("priority: onToken > tokens > other > default > raw", () => {
       tokens: {},
       other: "purple"
     });
-    // IDENTIFIER default is #60a5fa — other should override
+    // IDENTIFIER default is #4ec9b0 — other should override
     expect(out).toContain(spanWith("purple", "div"));
-    expect(out).not.toContain("#60a5fa");
+    expect(out).not.toContain("#4ec9b0");
+  });
+});
+
+// ── LOGIC token — JS inside logic blocks ─────────────────────
+
+describe("LOGIC token — JS inside static/runtime blocks", () => {
+  const JS_BLOCK = `static \${ const x = 1 + 2; }\$`;
+  const JS_MULTILINE = `runtime \${
+  const user = { name: "Adam", active: true };
+  return user.active ? user.name : null;
+}\$`;
+
+  it("renders LOGIC content with JS highlighting by default", () => {
+    const out = staticHighlight(JS_BLOCK);
+    // 'const' inside logic → JS keyword color
+    expect(out).toContain("color:#c586c0");
+    // numbers → JS number color
+    expect(out).toContain("color:#b5cea8");
+  });
+
+  it("LOGIC token value is the raw JS content", () => {
+    let captured;
+    staticHighlight(JS_BLOCK, {
+      tokens: {
+        LOGIC: { render: (value) => { captured = value; return value; } }
+      }
+    });
+    expect(captured).toContain("const x = 1 + 2;");
+  });
+
+  it("custom render replaces LOGIC output", () => {
+    const out = staticHighlight(JS_BLOCK, {
+      tokens: {
+        LOGIC: { render: (value) => `<code class="js">${value}</code>` }
+      }
+    });
+    expect(out).toContain(`<code class="js">`);
+    expect(out).toContain("const x = 1 + 2;");
+  });
+
+  it("onToken can intercept LOGIC and inject custom highlight", () => {
+    const out = staticHighlight(JS_BLOCK, {
+      onToken: ({ current }) => {
+        if (current.type === "LOGIC")
+          return `<span style="color:#92d400">${current.value}</span>`;
+      }
+    });
+    expect(out).toContain(`<span style="color:#92d400">`);
+    expect(out).toContain("const x = 1 + 2;");
+  });
+
+  it("onToken returning undefined falls through to JS-highlighted default for LOGIC", () => {
+    const out = staticHighlight(JS_BLOCK, {
+      onToken: () => undefined
+    });
+    // JS highlighting still applied through the default
+    expect(out).toContain("color:#c586c0");
+  });
+
+  it("works with runtime blocks too", () => {
+    const out = staticHighlight(JS_MULTILINE);
+    // LOGIC_OPEN and LOGIC_CLOSE should be highlighted with default blue
+    expect(out).toContain("#569CD6");
+    // LOGIC content uses default gray
+    expect(out).toContain("#d4d4d4");
+  });
+
+  it("VALUE default colors string content same as QUOTE (#ce9178)", () => {
+    // [div = class: "hello"][end] — VALUE "hello" is between two QUOTEs
+    const out = staticHighlight(WITH_KEY);
+    // QUOTE chars are #ce9178, VALUE between quotes should also be #ce9178
+    const quoteMatches  = [...out.matchAll(/color:#ce9178/g)];
+    expect(quoteMatches.length).toBeGreaterThanOrEqual(3); // two QUOTEs + the value
+    expect(out).toContain(`<span style="color:#ce9178">hello</span>`);
+  });
+
+  it("VALUE default colors numbers as #b5cea8", () => {
+    const out = staticHighlight(`[div = width: 100][end]`);
+    expect(out).toContain(`<span style="color:#b5cea8">100</span>`);
+  });
+
+  it("VALUE default colors booleans/null as #569CD6", () => {
+    const outTrue  = staticHighlight(`[input = disabled: true][end]`);
+    const outNull  = staticHighlight(`[img = src: null][end]`);
+    expect(outTrue).toContain(`<span style="color:#569CD6">true</span>`);
+    expect(outNull).toContain(`<span style="color:#569CD6">null</span>`);
+  });
+
+  it("STATIC_KEYWORD and RUNTIME_KEYWORD use default purple", () => {
+    const staticOut  = staticHighlight(JS_BLOCK);
+    const runtimeOut = staticHighlight(JS_MULTILINE);
+    expect(staticOut).toContain(`<span style="color:#c586c0">static `);
+    expect(runtimeOut).toContain(`<span style="color:#c586c0">runtime`);
   });
 });
 

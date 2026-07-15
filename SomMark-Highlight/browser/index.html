@@ -200,6 +200,7 @@
   {
     "imports": {
       "sommark":              "../bundle/sommark.parser.js",
+      "js-tokens":            "../node_modules/js-tokens/index.js",
       "@codemirror/view":     "https://esm.sh/@codemirror/view@6",
       "@codemirror/state":    "https://esm.sh/@codemirror/state@6",
       "@codemirror/commands": "https://esm.sh/@codemirror/commands@6"
@@ -267,38 +268,35 @@
   </div>
 
   <script type="module">
-    import { staticHighlight } from "../index.js";
+    import { staticHighlight, highlightJs, decorateJs } from "../index.js";
     import { attachHighlighter } from "../src/dynamic.js";
 
-    // ── Shared highlight config ───────────────────────────────────
+    // Custom config used by the "custom tokens" and dynamic editor sections
     const highlightConfig = {
       tokens: {
-        IDENTIFIER: "#60a5fa",
-        KEY: "#34d399",
-        END_KEYWORD: { color: "#6366f1", bold: true },
-        COMMENT: { color: "#4b4f68", italic: true },
-        COMMENT_BLOCK: { color: "#4b4f68", italic: true },
+        IDENTIFIER:      "#4ec9b0",
+        KEY:             "#7dd3fc",
+        END_KEYWORD:     { color: "#c586c0", bold: true },
+        COMMENT:         { color: "#6a9955", italic: true },
+        COMMENT_BLOCK:   { color: "#6a9955", italic: true },
+        QUOTE:           "#ce9178",
         VALUE: {
           context: ({ prev, current, next }) => {
-            const color = (prev?.type === "QUOTE" && next?.type === "QUOTE") ? "#fbbf24" : "#a3e635";
-            return `<span style="color:${color}">${current.value}</span>`;
+            if (prev?.type === "QUOTE" && next?.type === "QUOTE")
+              return `<span style="color:#ce9178">${current.value}</span>`;
+            return `<span style="color:#fbbf24">${current.value}</span>`;
           }
         },
-        PREFIX_V: {
-          render: (value) => {
-            const prefix = value[0];
-            const open = value[1];
-            const key = value.slice(2, -1);
-            const close = value[value.length - 1];
-            return `<span style="color:#f472b6">${prefix}</span><span style="color:#fb923c">${open}</span><span style="color:#34d399">${key}</span><span style="color:#fb923c">${close}</span>`;
-          }
-        },
-        PREFIX_P: "#fb923c",
-        PREFIX_JS: "#facc15",
-        LOGIC: "#a3e635",
-        STATIC_KEYWORD: "#c084fc",
-        RUNTIME_KEYWORD: "#c084fc",
-        FOR_EACH: "#c084fc",
+        PREFIX_V:        "#c586c0",
+        PREFIX_P:        "#c586c0",
+        PREFIX_OPEN:     "#c586c0",
+        PREFIX_CLOSE:    "#c586c0",
+        LOGIC_OPEN:      "#569CD6",
+        LOGIC:           { render: (value) => highlightJs(value), decorate: decorateJs },
+        LOGIC_CLOSE:     "#569CD6",
+        STATIC_KEYWORD:  "#c586c0",
+        RUNTIME_KEYWORD: "#c586c0",
+        FOR_EACH:        "#c586c0",
       },
       other: "#8b8fa8"
     };
@@ -309,49 +307,56 @@
     [h1 = class: "title"]v{name}[end]
     [p = class: "bio"]p{description}[end]
     [a = href: p{link}, class: "cta"]Read more[end]
+    static \${
+      // user profile
+      const user = { name: "Adam", age: 25, active: true };
+
+      /* validate email format */
+      const pattern = /^\\w+@\\w+\\.\\w+\$/;
+
+      const greet = (name) => \`Hello, \${name}!\`;
+
+      if (user.active) {
+        console.log(greet(user.name));
+      }
+
+      return user.age > 18 ? "adult" : "minor";
+    }\$
   [end]
 [end]`;
 
-    // ── 1. Default theme ─────────────────────────────────────────
+    // Static — default (no config)
     document.getElementById("staticDefault").innerHTML = staticHighlight(sample);
 
-    // ── 2. Custom tokens ─────────────────────────────────────────
+    // Static — custom tokens (override a few to show the API)
     document.getElementById("staticCustom").innerHTML =
       staticHighlight(sample, {
         ...highlightConfig,
         tokens: {
           ...highlightConfig.tokens,
           IDENTIFIER: "#f472b6",
-          COMMENT: { render: (v) => `<span style="color:#4b4f68;font-style:italic;opacity:0.55">${v}</span>` },
+          COMMENT: { render: (v) => `<span style="color:#6a9955;font-style:italic;opacity:0.65">${v}</span>` },
         }
       });
 
-    // ── 3. onToken ───────────────────────────────────────────────
+    // Static — onToken full control
     document.getElementById("staticOnToken").innerHTML =
       staticHighlight(sample, {
         onToken: ({ current }) => {
           const map = {
-            IDENTIFIER: "#60a5fa", END_KEYWORD: "#6366f1",
-            KEY: "#34d399", COMMENT: "#4b4f68",
-            PREFIX_V: "#f472b6", PREFIX_P: "#fb923c",
+            IDENTIFIER: "#4ec9b0", END_KEYWORD: "#c586c0",
+            KEY: "#7dd3fc", COMMENT: "#6a9955",
+            PREFIX_V: "#c586c0", PREFIX_P: "#c586c0",
           };
           const color = map[current.type];
           if (!color) return undefined;
-          const bold = current.type === "END_KEYWORD" ? ";font-weight:bold" : "";
-          const italic = current.type === "COMMENT" ? ";font-style:italic" : "";
+          const bold   = current.type === "END_KEYWORD" ? ";font-weight:bold" : "";
+          const italic = current.type === "COMMENT"     ? ";font-style:italic" : "";
           return `<span style="color:${color}${bold}${italic}">${current.value}</span>`;
         }
       });
 
-    // ── 4. Dynamic editor ────────────────────────────────────────
-    const jar = attachHighlighter(document.getElementById("editor"), {
-      ...highlightConfig,
-      caretColor: "#e8eaf0",
-    });
-
-    jar.setValue(sample);
-
-    // ── Copy buttons ─────────────────────────────────────────────
+    // Copy buttons
     document.querySelectorAll(".copy-btn[data-target]").forEach(btn => {
       btn.addEventListener("click", () => {
         const pre = document.getElementById(btn.dataset.target);
@@ -362,6 +367,14 @@
         });
       });
     });
+
+    // Dynamic editor
+    const jar = attachHighlighter(document.getElementById("editor"), {
+      ...highlightConfig,
+      caretColor: "#e8eaf0",
+    });
+
+    jar.setValue(sample);
   </script>
 </body>
 

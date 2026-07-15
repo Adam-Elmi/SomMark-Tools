@@ -24,8 +24,11 @@ const convertBtn           = document.getElementById("convertBtn");
 const clearSvgBtn          = document.getElementById("clearSvgBtn");
 const output               = document.getElementById("output");
 const copyBtn              = document.getElementById("copyBtn");
+const endToggle            = document.getElementById("endToggle");
 
 let currentSommark  = "";
+let lastSvgText     = "";
+let namedEnd        = true;
 let searchDebounce  = null;
 let selectedResult  = null;
 let selectedChip    = null;
@@ -65,22 +68,35 @@ function nodeToSommark(node, depth = 0) {
     return t ? indent + t : null;
   }
   if (node.nodeType !== Node.ELEMENT_NODE) return null;
-  const tag = node.tagName.toLowerCase();
+  // SVG elements must preserve case (clipPath ≠ clippath inside <svg>).
+  // HTML elements in SVG namespace are lowercase already; HTML elements outside are uppercase → lowercase them.
+  const tag = node.namespaceURI === "http://www.w3.org/2000/svg"
+    ? node.tagName
+    : node.tagName.toLowerCase();
   const attrs = Array.from(node.attributes)
-    .map(a => `${a.name}: "${a.value.replace(/"/g, '\\"')}"`)
+    .map(a => {
+      // Keys with colons or other non-identifier chars (e.g. xlink:href) must be quoted per SomMark props syntax
+      const key = /[^a-zA-Z0-9\-_$]/.test(a.name)
+        ? `"${a.name.replace(/"/g, '\\"')}"`
+        : a.name;
+      return `${key}: "${a.value.replace(/"/g, '\\"')}"`;
+    })
     .join(", ");
   const attrStr = attrs ? ` = ${attrs}` : "";
   const children = Array.from(node.childNodes)
     .map(c => nodeToSommark(c, depth + 1))
     .filter(Boolean);
-  if (children.length === 0) return `${indent}[${tag}${attrStr}][end]`;
-  return `${indent}[${tag}${attrStr}]\n${children.join("\n")}\n${indent}[end]`;
+  if (children.length === 0) return `${indent}[${tag}${attrStr}!]`;
+  return `${indent}[${tag}${attrStr}]\n${children.join("\n")}\n${indent}[end${namedEnd ? ":" + tag : ""}]`;
 }
 
 function svgStringToSommark(str) {
-  const doc = new DOMParser().parseFromString(str.trim(), "image/svg+xml");
-  if (doc.querySelector("parsererror")) throw new Error("Invalid SVG");
-  return nodeToSommark(doc.documentElement, 0);
+  // Use the HTML parser: more lenient than the XML parser and correctly sets up
+  // SVG namespace so tagName case is preserved for SVG elements (clipPath, linearGradient, etc.)
+  const doc = new DOMParser().parseFromString(str.trim(), "text/html");
+  const svgEl = doc.querySelector("svg");
+  if (!svgEl) throw new Error("Invalid SVG");
+  return nodeToSommark(svgEl, 0);
 }
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -109,6 +125,7 @@ function clearSvgArea() {
   clearSvgBtn.style.display = "none";
   output.innerHTML  = '<span class="placeholder">Output will appear here...</span>';
   currentSommark    = "";
+  lastSvgText       = "";
 }
 
 function setOutput(smark) {
@@ -136,6 +153,7 @@ async function loadIcon(collection, name) {
     `<span style="color:var(--text-muted)">/</span>` +
     `<span style="color:var(--text-secondary)">${name}</span>`;
 
+  lastSvgText = svgText;
   await showSvgCode(svgText);
   setOutput(svgStringToSommark(svgText));
 }
@@ -364,6 +382,7 @@ async function convertPasted() {
   const raw = svgInput.value.trim();
   if (!raw) return;
   try {
+    lastSvgText = raw;
     await showSvgCode(raw);
     setOutput(svgStringToSommark(raw));
     previewIcon.innerHTML = raw;
@@ -393,3 +412,9 @@ fetchBtn.addEventListener("click", fetchExact);
 convertBtn.addEventListener("click", convertPasted);
 clearSvgBtn.addEventListener("click", clearSvgArea);
 copyBtn.addEventListener("click", copyOutput);
+endToggle.addEventListener("click", () => {
+  namedEnd = !namedEnd;
+  endToggle.textContent = namedEnd ? "[end:name]" : "[end]";
+  endToggle.classList.toggle("open", namedEnd);
+  if (lastSvgText) setOutput(svgStringToSommark(lastSvgText));
+});
