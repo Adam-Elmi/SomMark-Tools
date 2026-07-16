@@ -1,6 +1,6 @@
 {
   "name": "sommark-highlight",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "description": "Syntax highlighting for SomMark — web and terminal, static and dynamic.",
   "main": "./index.js",
