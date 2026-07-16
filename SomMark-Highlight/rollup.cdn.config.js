@@ -11,6 +11,7 @@ export default [
       name: "SomMarkHighlight",
       banner,
     },
+    plugins: [nodeResolve()],
   },
   {
     input: "src/cdn.js",
