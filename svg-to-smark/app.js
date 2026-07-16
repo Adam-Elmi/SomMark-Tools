@@ -36,6 +36,8 @@ let allCollections  = [];
 let searchAllMode   = false;
 
 // ── SomMark highlight config ──────────────────────────────────────────────────
+const _esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 const highlightConfig = {
   tokens: {
     IDENTIFIER:      "#60a5fa",
@@ -46,13 +48,15 @@ const highlightConfig = {
     VALUE: {
       context: ({ prev, current, next }) => {
         const color = (prev?.type === "QUOTE" && next?.type === "QUOTE") ? "#fbbf24" : "#a3e635";
-        return `<span style="color:${color}">${current.value}</span>`;
+        return `<span style="color:${color}">${_esc(current.value)}</span>`;
       }
     },
     PREFIX_V:        "#f472b6",
     PREFIX_P:        "#fb923c",
-    PREFIX_JS:       "#facc15",
-    LOGIC:           "#a3e635",
+    PREFIX_OPEN:     "#facc15",
+    PREFIX_CLOSE:    "#facc15",
+    LOGIC_OPEN:      "#a3e635",
+    LOGIC_CLOSE:     "#a3e635",
     STATIC_KEYWORD:  "#c084fc",
     RUNTIME_KEYWORD: "#c084fc",
     FOR_EACH:        "#c084fc",
